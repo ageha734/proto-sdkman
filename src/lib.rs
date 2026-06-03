@@ -15,6 +15,7 @@ extern "ExtismHost" {
 static SDKMAN_API_VERSION_URL: &str =
     "https://api.sdkman.io/2/broker/download/sdkman/version/stable";
 static SDKMAN_INSTALL_URL: &str = "https://get.sdkman.io";
+static SDKMAN_HOME_DIR: &str = "sdkman";
 
 /// Register the SDKMAN tool with proto.
 #[plugin_fn]
@@ -111,8 +112,11 @@ pub fn native_install(
         install_dir.display()
     );
 
-    // Set SDKMAN_DIR so the installer places files in the proto-managed directory
-    let sdkman_dir = install_dir.to_string_lossy().to_string();
+    // Install SDKMAN in a dedicated subdirectory.
+    // proto may pre-create `install_dir`, and the SDKMAN installer treats an
+    // existing target directory as an already-installed instance.
+    let sdkman_dir_path = install_dir.join(SDKMAN_HOME_DIR);
+    let sdkman_dir = sdkman_dir_path.to_string_lossy().to_string();
     host_env!("SDKMAN_DIR", sdkman_dir.as_str());
 
     // Download and execute the install script
@@ -135,7 +139,7 @@ pub fn native_install(
     }
 
     // Verify installation by checking for sdkman-init.sh
-    let init_script = install_dir.join("bin").join("sdkman-init.sh");
+    let init_script = sdkman_dir_path.join("bin").join("sdkman-init.sh");
     let installed = init_script.exists();
 
     if installed {
@@ -180,7 +184,7 @@ pub fn locate_executables(
     Json(_): Json<LocateExecutablesInput>,
 ) -> FnResult<Json<LocateExecutablesOutput>> {
     let primary = ExecutableConfig {
-        exe_path: Some("bin/sdkman-init.sh".into()),
+        exe_path: Some(format!("{}/bin/sdkman-init.sh", SDKMAN_HOME_DIR)),
         parent_exe_name: Some("bash".into()),
         parent_exe_args: vec!["-c".into()],
         shim_before_args: Some(StringOrVec::String("source \"$EXE\" && sdk".into())),
@@ -194,7 +198,7 @@ pub fn locate_executables(
 
     Ok(Json(LocateExecutablesOutput {
         exes: exes.into_iter().collect(),
-        exes_dirs: vec!["bin".into()],
+        exes_dirs: vec![format!("{}/bin", SDKMAN_HOME_DIR)],
         ..LocateExecutablesOutput::default()
     }))
 }
@@ -207,7 +211,7 @@ pub fn sync_shell_profile(
     Json(input): Json<SyncShellProfileInput>,
 ) -> FnResult<Json<SyncShellProfileOutput>> {
     let install_dir = real_path!(buf, input.context.tool_dir.any_path());
-    let sdkman_dir = install_dir.to_string_lossy().to_string();
+    let sdkman_dir = install_dir.join(SDKMAN_HOME_DIR).to_string_lossy().to_string();
 
     let mut export_vars = std::collections::HashMap::new();
     export_vars.insert("SDKMAN_DIR".into(), sdkman_dir);
