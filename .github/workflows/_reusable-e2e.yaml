@@ -45,7 +45,7 @@ jobs:
 
             const prototoolsPath = join(process.env.GITHUB_WORKSPACE, '.prototools');
             const content = [
-              'sdkman = "0.1.0"',
+              'sdkman = "5.23.0"',
               '[plugins.tools]',
               `sdkman = "${pluginUri}"`,
             ].join('\n');
