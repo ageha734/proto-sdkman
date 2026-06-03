@@ -10,36 +10,44 @@ permissions:
   contents: write
 
 jobs:
-  tag-and-release:
-    name: Tag and Release
-    if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release/')
+  tag:
+    if: github.event.pull_request.merged && startsWith(github.event.pull_request.head.ref, 'release/')
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
     outputs:
-      tag: ${{ steps.extract.outputs.tag }}
+      tag: ${{ steps.tag.outputs.tag }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-
-      - name: Extract version from branch
-        id: extract
-        env:
-          BRANCH: ${{ github.event.pull_request.head.ref }}
-        run: |
-          TAG="${BRANCH#release/}"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-
       - name: Create tag
-        env:
-          TAG: ${{ steps.extract.outputs.tag }}
-        run: |
-          if git rev-parse "$TAG" >/dev/null 2>&1; then
-            echo "Tag $TAG already exists, skipping"
-          else
-            git tag "$TAG"
-            git push origin "$TAG"
-          fi
+        id: tag
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const branch = context.payload.pull_request.head.ref;
+            const tag = branch.replace('release/', '');
+            await github.rest.git.createRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: `refs/tags/${tag}`,
+              sha: context.payload.pull_request.merge_commit_sha,
+            });
+            core.setOutput('tag', tag);
+            console.log(`Created tag ${tag}`);
+
+  build:
+    needs: tag
+    permissions:
+      contents: read
+    uses: ./.github/workflows/_reusable-cargo-build.yaml
+    with:
+      ref: ${{ needs.tag.outputs.tag }}
 
   release:
-    needs: tag-and-release
+    needs:
+      - tag
+      - build
+    permissions:
+      contents: write
     uses: ./.github/workflows/_reusable-release.yaml
     with:
-      tag: ${{ needs.tag-and-release.outputs.tag }}
+      tag: ${{ needs.tag.outputs.tag }}

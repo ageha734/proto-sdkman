@@ -1,4 +1,4 @@
-name: Release
+name: "[Reusable] Release"
 
 on:
   workflow_call:
@@ -14,33 +14,38 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build-and-release:
-    name: Build and Release
+  release:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-
-      - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          toolchain: stable
-          targets: wasm32-wasip1
+          ref: ${{ inputs.tag }}
+          persist-credentials: false
 
-      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
+      - uses: denoland/setup-deno@667a34cdef165d8d2b2e98dde39547c9daac7282 # v2.0.4
+        with:
+          deno-version: v2.x
 
-      - name: Build WASM plugin
-        run: cargo build --target wasm32-wasip1 --release
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: proto_sdkman.wasm
+          path: .
 
       - name: Compute checksum
-        run: |
-          cd target/wasm32-wasip1/release
-          sha256sum proto_sdkman.wasm > proto_sdkman.wasm.sha256
+        run: sha256sum proto_sdkman.wasm > proto_sdkman.wasm.sha256
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@7b4da11513bf3f43f9999e90eabced41ab8bb048 # v2.2.3
+      - uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
         with:
           tag_name: ${{ inputs.tag }}
-          generate_release_notes: true
-          prerelease: ${{ contains(inputs.tag, '-alpha') || contains(inputs.tag, '-beta') || contains(inputs.tag, '-rc') }}
+          draft: true
           files: |
-            target/wasm32-wasip1/release/proto_sdkman.wasm
-            target/wasm32-wasip1/release/proto_sdkman.wasm.sha256
+            proto_sdkman.wasm
+            proto_sdkman.wasm.sha256
+          prerelease: ${{ contains(inputs.tag, '-alpha.') }}
+          generate_release_notes: true
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+        run: gh release edit "$TAG" --draft=false

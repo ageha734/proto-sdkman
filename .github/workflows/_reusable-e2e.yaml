@@ -1,4 +1,4 @@
-name: E2E
+name: "[Reusable] E2E"
 
 on:
   workflow_call:
@@ -11,41 +11,49 @@ jobs:
     name: "E2E (${{ matrix.os }})"
     runs-on: ${{ matrix.os }}
     strategy:
-      matrix:
-        os: [ubuntu-24.04, macos-15]
       fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+          - os: ubuntu-24.04
+          - os: windows-2025
+
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 
-      - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          toolchain: stable
-          targets: wasm32-wasip1
+          name: proto_sdkman.wasm
+          path: .
 
-      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
-
-      - name: Build WASM plugin
-        run: cargo build --target wasm32-wasip1 --release
-
-      - name: Setup proto
-        uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
+      - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
         with:
           auto-install: true
 
       - name: Configure plugin
-        shell: bash
-        run: |
-          mkdir -p ~/.proto
-          cat > ~/.proto/.prototools <<'PROTOEOF'
-          [plugins]
-          sdkman-test = "file://TARGET_PATH/proto_sdkman.wasm"
-          PROTOEOF
-          sed -i'' -e "s|TARGET_PATH|$(pwd)/target/wasm32-wasip1/release|g" ~/.proto/.prototools
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { writeFileSync } = require('node:fs');
+            const { join } = require('node:path');
 
-      - name: Run E2E - proto install
-        run: proto install sdkman-test
+            const pluginPath = join(process.env.GITHUB_WORKSPACE, 'proto_sdkman.wasm');
+            const normalizedPath = pluginPath.replace(/\\/g, '/');
+            const pluginUri = `file://${normalizedPath}`;
 
-      - name: Verify installation
-        run: proto run sdkman-test -- version
+            const prototoolsPath = join(process.env.GITHUB_WORKSPACE, '.prototools');
+            const content = [
+              'sdkman = "0.1.0"',
+              '[plugins.tools]',
+              `sdkman = "${pluginUri}"`,
+            ].join('\n');
+
+            writeFileSync(prototoolsPath, content);
+
+      - name: Run E2E (${{ matrix.os }})
+        run: proto install sdkman
+
+      - name: Verify installation (${{ matrix.os }})
+        run:  proto run sdkman -- version
