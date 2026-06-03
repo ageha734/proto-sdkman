@@ -179,13 +179,15 @@ pub fn native_uninstall(
 pub fn locate_executables(
     Json(_): Json<LocateExecutablesInput>,
 ) -> FnResult<Json<LocateExecutablesOutput>> {
-    let mut primary = ExecutableConfig::default();
-    primary.exe_path = Some("bin/sdkman-init.sh".into());
-    primary.parent_exe_name = Some("bash".into());
-    primary.parent_exe_args = vec!["-c".into()];
-    primary.shim_before_args = Some(StringOrVec::String("source \"$EXE\" && sdk".into()));
-    primary.primary = true;
-    primary.no_bin = true;
+    let primary = ExecutableConfig {
+        exe_path: Some("bin/sdkman-init.sh".into()),
+        parent_exe_name: Some("bash".into()),
+        parent_exe_args: vec!["-c".into()],
+        shim_before_args: Some(StringOrVec::String("source \"$EXE\" && sdk".into())),
+        primary: true,
+        no_bin: true,
+        ..ExecutableConfig::default()
+    };
 
     let mut exes = std::collections::HashMap::new();
     exes.insert("sdk".into(), primary);

@@ -10,7 +10,7 @@ mod register_tool {
 
         let output = plugin
             .register_tool(RegisterToolInput {
-                id: "sdkman".into(),
+                id: "sdkman".to_owned().into(),
             })
             .await;
 
