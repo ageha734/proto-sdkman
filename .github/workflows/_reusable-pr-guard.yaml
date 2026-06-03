@@ -1,0 +1,50 @@
+name: PR Guard
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  commitlint:
+    name: Commit Lint
+    runs-on: ubuntu-24.04
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: wagoid/commitlint-github-action@b948419dd99f3fd78a6548d48f94e3df7f6bf3ed # v6.2.1
+        with:
+          configFile: .commitlintrc.yml
+
+  pr-size:
+    name: PR Size
+    runs-on: ubuntu-24.04
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Check PR size
+        uses: codelytv/pr-size-labeler@095a41fca88b8764fd9e008ad269bcdb82bb38b9 # v1.10.4
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          xs_label: size/XS
+          xs_max_size: 10
+          s_label: size/S
+          s_max_size: 100
+          m_label: size/M
+          m_max_size: 500
+          l_label: size/L
+          l_max_size: 1000
+          xl_label: size/XL
+          fail_if_xl: true
