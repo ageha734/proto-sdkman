@@ -1,0 +1,53 @@
+name: On Release Merge
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - master
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    if: github.event.pull_request.merged && startsWith(github.event.pull_request.head.ref, 'release/')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - name: Create tag
+        id: tag
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const branch = context.payload.pull_request.head.ref;
+            const tag = branch.replace('release/', '');
+            await github.rest.git.createRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: `refs/tags/${tag}`,
+              sha: context.payload.pull_request.merge_commit_sha,
+            });
+            core.setOutput('tag', tag);
+            console.log(`Created tag ${tag}`);
+
+  build:
+    needs: tag
+    permissions:
+      contents: read
+    uses: ./.github/workflows/_reusable-cargo-build.yaml
+    with:
+      ref: ${{ needs.tag.outputs.tag }}
+
+  release:
+    needs:
+      - tag
+      - build
+    permissions:
+      contents: write
+    uses: ./.github/workflows/_reusable-release.yaml
+    with:
+      tag: ${{ needs.tag.outputs.tag }}

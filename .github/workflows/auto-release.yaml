@@ -1,0 +1,48 @@
+name: Auto Release
+
+on:
+  push:
+    branches:
+      - master
+
+concurrency:
+  group: auto-release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  create-release-pr:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: denoland/setup-deno@667a34cdef165d8d2b2e98dde39547c9daac7282 # v2.0.4
+        with:
+          deno-version: v2.x
+
+      - id: version
+        run: deno run --allow-run --allow-read --allow-env .github/scripts/release/determine-version.ts
+
+      - if: steps.version.outputs.version != ''
+        run: sed -i "s/^version = \".*\"/version = \"${{ steps.version.outputs.version }}\"/" Cargo.toml
+
+      - if: steps.version.outputs.version != ''
+        run: cargo generate-lockfile
+
+      - if: steps.version.outputs.version != ''
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          branch: release/v${{ steps.version.outputs.version }}
+          commit-message: "chore(release): v${{ steps.version.outputs.version }}"
+          title: "release: v${{ steps.version.outputs.version }}"
+          body: |
+            ## Release v${{ steps.version.outputs.version }}
+
+            This is an automated release PR. Merging will trigger a tag and release.
+          labels: release

@@ -1,0 +1,80 @@
+name: Promote Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Pre-release tag to promote (e.g. v1.2.0-alpha.20260603.1)"
+        required: true
+        type: string
+
+concurrency:
+  group: promote-release
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  promote:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Determine stable version
+        id: version
+        env:
+          PRE_TAG: ${{ inputs.tag }}
+        run: |
+          STABLE_VERSION="${PRE_TAG#v}"
+          STABLE_VERSION="${STABLE_VERSION%%-*}"
+          echo "stable_tag=v${STABLE_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Promoting ${PRE_TAG} -> v${STABLE_VERSION}"
+
+      - name: Create stable tag
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          PRE_TAG: ${{ inputs.tag }}
+          STABLE_TAG: ${{ steps.version.outputs.stable_tag }}
+        with:
+          script: |
+            const preTag = process.env.PRE_TAG;
+            const stableTag = process.env.STABLE_TAG;
+            const { data: ref } = await github.rest.git.getRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: `tags/${preTag}`,
+            });
+            await github.rest.git.createRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: `refs/tags/${stableTag}`,
+              sha: ref.object.sha,
+            });
+            console.log(`Created tag ${stableTag} at ${ref.object.sha}`);
+
+      - run: mkdir -p release-assets
+
+      - name: Download pre-release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PRE_TAG: ${{ inputs.tag }}
+        run: gh release download "$PRE_TAG" -D release-assets -R ${{ github.repository }}
+
+      - name: Create stable release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STABLE_TAG: ${{ steps.version.outputs.stable_tag }}
+          PRE_TAG: ${{ inputs.tag }}
+        run: >-
+          gh release create "$STABLE_TAG"
+          --title "$STABLE_TAG"
+          --notes "Promoted from ${PRE_TAG}"
+          --latest
+          release-assets/*
+          -R ${{ github.repository }}
+
+      - name: Demote pre-release to None
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PRE_TAG: ${{ inputs.tag }}
+        run: gh release edit "$PRE_TAG" --prerelease=false --latest=false -R ${{ github.repository }}

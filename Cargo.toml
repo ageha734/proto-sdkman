@@ -6,6 +6,10 @@ license = "MIT"
 description = "A proto WASM plugin for managing SDKMAN installations"
 repository = "https://github.com/ageha734/proto-sdkman"
 
+[features]
+default = []
+wasm = []
+
 [lib]
 crate-type = ["cdylib"]
 

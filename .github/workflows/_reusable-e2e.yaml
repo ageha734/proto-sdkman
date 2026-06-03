@@ -1,0 +1,59 @@
+name: "[Reusable] E2E"
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    name: "E2E (${{ matrix.os }})"
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+          - os: ubuntu-24.04
+          - os: windows-2025
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: proto_sdkman.wasm
+          path: .
+
+      - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
+        with:
+          auto-install: true
+
+      - name: Configure plugin
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { writeFileSync } = require('node:fs');
+            const { join } = require('node:path');
+
+            const pluginPath = join(process.env.GITHUB_WORKSPACE, 'proto_sdkman.wasm');
+            const normalizedPath = pluginPath.replace(/\\/g, '/');
+            const pluginUri = `file://${normalizedPath}`;
+
+            const prototoolsPath = join(process.env.GITHUB_WORKSPACE, '.prototools');
+            const content = [
+              'sdkman = "0.1.0"',
+              '[plugins.tools]',
+              `sdkman = "${pluginUri}"`,
+            ].join('\n');
+
+            writeFileSync(prototoolsPath, content);
+
+      - name: Run E2E (${{ matrix.os }})
+        run: proto install sdkman
+
+      - name: Verify installation (${{ matrix.os }})
+        run:  proto run sdkman -- version

@@ -1,0 +1,26 @@
+name: Push
+
+on:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  rustfmt:
+    uses: ./.github/workflows/_reusable-rustfmt.yaml
+
+  clippy:
+    uses: ./.github/workflows/_reusable-clippy.yaml
+
+  test:
+    uses: ./.github/workflows/_reusable-cargo-test.yaml
+
+  build:
+    uses: ./.github/workflows/_reusable-cargo-build.yaml
+
+  e2e:
+    needs: [build]
+    uses: ./.github/workflows/_reusable-e2e.yaml
